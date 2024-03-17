@@ -151,7 +151,7 @@ def setContratRempli(id_partie, id_assassin):
             setUpdateEtatContrat(VAL_CONTRAT_ECHOUE, id_contrat_cible)
             print("FIN DE PARTIE")
             print('Gagnant : '+getNomJoueurFromId(id_assassin)) 
-            #finPartie(id_partie)
+            finPartie(id_partie)
 
         else:
             id_arme_cible = getIdArmeFromIdContrat(id_contrat_cible)
@@ -174,6 +174,14 @@ def printContrat(id_contrat):
     else:
         print('Pas de contrat associe')
 
+def finPartie(id_partie):
+    commande = "UPDATE parties SET etat = 0 WHERE id = ?"
+    val = (id_partie)
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande,val)
+    conn.commit()
+    conn.close
 
 def addPartie(nom, nmb):
     commande = "INSERT INTO parties (nom, nmbJoueurs) VALUES (?,?)"
@@ -194,17 +202,52 @@ def triJoueurs(joueurs):
 
     return joueursTries
 
-def newPartie(nom, nmb):
-    addPartie(nom, nmb)
+def joinPartie(nom_joueur, nom_partie):
+    commande = "SELECT id FROM joueurs WHERE nom = ?"
+    val = (nom_joueur,)
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande,val)
+    joueur = cur.fetchall()
+    conn.close
 
-def joinPartie(id_joueur,id_partie):
-    commande = "INSERT INTO contrats (id_partie, id_assassin) VALUES (?,?)"
+    if(len(joueur)!=1):
+        return "joueur inconnu"
+
+    commande = "SELECT id FROM parties WHERE nom = ?"
+    val = (nom_partie,)
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande,val)
+    partie = cur.fetchall()
+    conn.close
+
+    if(len(partie)!=1):
+        return "partie inconnue"
+
+    id_partie = partie[0][0]
+    id_joueur = joueur[0][0]
+
+    commande = "SELECT id_assassin FROM contrats WHERE id_assassin = ? AND id_partie = ?"
     val = (id_joueur, id_partie)
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande,val)
+    id = cur.fetchall()
+    conn.close
+
+    if(len(id)!=0):
+        return "joueur deja dans la partie"
+
+    commande = "INSERT INTO contrats (id_partie, id_assassin) VALUES (?,?)"
+    val = (id_partie, id_joueur)
     conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
     cur=conn.cursor()
     cur.execute(commande,val)
     conn.commit()
     conn.close
+
+    return 'joueur ajoute a la partie'
 
 
 def getAllIdJoueursFromIdPartie(id_partie):
@@ -222,8 +265,64 @@ def getAllIdJoueursFromIdPartie(id_partie):
 def printAllContrats(id_partie):
     liste_id_joueurs = getAllIdJoueursFromIdPartie(id_partie)
     nmb_joueurs=len(liste_id_joueurs)
-    print(nmb_joueurs)
-    for i in range(0,nmb_joueurs-1):
+    for i in range(0,nmb_joueurs):
         printContrat(getIdContratFromIdAssassin(id_partie, liste_id_joueurs[i][0]))
 
-printAllContrats(1)
+def addJoueur(nom_joueur):
+    commande = "SELECT id FROM joueurs WHERE nom = ?"
+    val = (nom_joueur,)
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande,val)
+    joueur = cur.fetchall()
+    conn.close
+
+    if(len(joueur)!=0):
+        return "Le joueur existe deja"
+
+
+    commande = "INSERT INTO joueurs (nom) VALUES (?)"
+    val = (nom_joueur,)
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande,val)
+    conn.commit()
+    conn.close
+
+    return 'Joueur cree'
+
+def addPartie(nom_partie, nmb_joueur):
+    commande = "SELECT id FROM parties WHERE nom = ?"
+    val = (nom_partie,)
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande,val)
+    partie = cur.fetchall()
+    conn.close
+
+    if(len(partie)!=0):
+        return "Une partie porte deja le meme nom"
+
+
+    commande = "INSERT INTO parties (nom,nmbJoueurs) VALUES (?,?)"
+    val = (nom_partie,nmb_joueur)
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande,val)
+    conn.commit()
+    conn.close
+
+    return 'Partie creee'
+
+#----------------Creation des joueurs----------------------
+#IHM : nom_joueur
+#addJoueur(nom_joueur)
+
+#------------------Creation de la partie-------------------
+#IHM : nom_partie, nmb_joueurs
+#addPartie(nom_partie,nmb_joueurs)
+
+#--------------------Join partie-------------------------
+#IHM : nom_joueur, nom_partie
+#joinPartie(nom_joueur,nom_partie)
+
