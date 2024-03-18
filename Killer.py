@@ -1,6 +1,7 @@
 from os import remove
 import random, sqlite3
 from datetime import datetime
+from flask import Flask
 
 VAL_CONTRAT_REALISE = 1
 VAL_CONTRAT_EN_COURS = 0
@@ -8,6 +9,14 @@ VAL_CONTRAT_ECHOUE = -1
 VAL_PARTIE_INIT = 0
 VAL_PARTIE_EN_COURS = 1
 VAL_PARTIE_FINIE = 2
+
+
+app = Flask(__name__)
+
+@app.route("/")
+def hello_world():
+    return "<p>Hello, World!</p>"
+
 
 def getNomJoueurFromId(id):
     commande = "SELECT nom FROM joueurs WHERE id = "+str(id)
@@ -52,6 +61,9 @@ def getIdJoueurFromNom(nom):
     conn.close
 
     id=rows
+    if(len(id)==0):
+        return -1
+
     return id[0][0]
 
 def getNmbMaxJoueursFromIdPartie(id_partie):
@@ -143,7 +155,11 @@ def setUpdateEtatContrat(etat, id_contrat):
     conn.commit()
     conn.close
 
-def setContratRempli(id_partie, id_assassin):
+@app.route('/contratDone/<nom_assassin>/<nom_partie>')
+def setContratRempli(nom_partie, nom_assassin):
+    id_partie=getIdPartieFromNomPartie(nom_partie)
+    id_assassin = getIdJoueurFromNom(nom_assassin)
+
     id_contrat_realise = getIdContratFromIdAssassin(id_partie, id_assassin)
     if id_contrat_realise != -1:
         id_cible = getIdCibleFromIdContrat(id_contrat_realise)
@@ -153,8 +169,7 @@ def setContratRempli(id_partie, id_assassin):
         if (id_cible_cible == id_assassin):
             setUpdateEtatContrat(VAL_CONTRAT_REALISE, id_contrat_realise)
             setUpdateEtatContrat(VAL_CONTRAT_ECHOUE, id_contrat_cible)
-            print("FIN DE PARTIE")
-            print('Gagnant : '+getNomJoueurFromId(id_assassin)) 
+            return('FIN DE PARTIE ------------------ Gagnant : '+getNomJoueurFromId(id_assassin)) 
             finPartie(id_partie)
 
         else:
@@ -163,9 +178,9 @@ def setContratRempli(id_partie, id_assassin):
             setUpdateEtatContrat(VAL_CONTRAT_REALISE, id_contrat_realise)
             setUpdateEtatContrat(VAL_CONTRAT_ECHOUE, id_contrat_cible)
             addContrat(id_partie, id_assassin, id_cible_cible, id_arme_cible, id_lieu_cible)
-            print(printContrat(getIdContratFromIdAssassin(id_partie,id_assassin)))
+            return(getContrat(getIdContratFromIdAssassin(id_partie,id_assassin)))
 
-def printContrat(id_contrat):
+def getContrat(id_contrat):
     if (id_contrat != -1) :
         id_cible = getIdCibleFromIdContrat(id_contrat)
         id_arme = getIdArmeFromIdContrat(id_contrat)
@@ -173,10 +188,10 @@ def printContrat(id_contrat):
         nom_cible = getNomJoueurFromId(id_cible)
         nom_arme = getNomArmeFromId(id_arme)
         nom_lieu = getNomLieuFromId(id_lieu)
-        print('Contrat : '+nom_cible+', '+nom_arme+', '+nom_lieu)
+        return ('Contrat : '+nom_cible+', '+nom_arme+', '+nom_lieu)
 
     else:
-        print('Pas de contrat associe')
+        return('Pas de contrat associe')
 
 def finPartie(id_partie):
     commande = "UPDATE parties SET etat = ? WHERE id = ?"
@@ -187,7 +202,19 @@ def finPartie(id_partie):
     conn.commit()
     conn.close
 
+@app.route('/newParty/<nom>/<nmb>')
 def addPartie(nom, nmb):
+    commande = "SELECT nom FROM parties WHERE nom = ?"
+    val = (nom,)
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande,val)
+    partie = cur.fetchall()
+    conn.close
+
+    if(len(partie)!=0):
+        return "Le partie existe deja"
+
     commande = "INSERT INTO parties (nom, nmbJoueurs) VALUES (?,?)"
     val = (nom, nmb)
     conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
@@ -195,6 +222,8 @@ def addPartie(nom, nmb):
     cur.execute(commande,val)
     conn.commit()
     conn.close
+
+    return "Partie creee"
 
 def triIds(ids):
     nmbJoueurs = len(ids)
@@ -206,6 +235,7 @@ def triIds(ids):
 
     return idsTries
 
+@app.route('/join/<nom_joueur>/<nom_partie>')
 def joinPartie(nom_joueur, nom_partie):
     commande = "SELECT id FROM joueurs WHERE nom = ?"
     val = (nom_joueur,)
@@ -270,8 +300,16 @@ def printAllContrats(id_partie):
     liste_id_joueurs = getAllIdJoueursFromIdPartie(id_partie)
     nmb_joueurs=len(liste_id_joueurs)
     for i in range(0,nmb_joueurs):
-        printContrat(getIdContratFromIdAssassin(id_partie, liste_id_joueurs[i][0]))
+        print(getContrat(getIdContratFromIdAssassin(id_partie, liste_id_joueurs[i][0])))
 
+@app.route('/myContrat/<nom_joueur>/<nom_partie>')
+def printContratFromJoueur(nom_joueur,nom_partie):
+    id_partie = getIdPartieFromNomPartie(nom_partie)
+    id_joueur = getIdJoueurFromNom(nom_joueur)
+    return getContrat(getIdContratFromIdAssassin(id_partie,id_joueur))
+
+
+@app.route('/newPlayer/<nom_joueur>')
 def addJoueur(nom_joueur):
     commande = "SELECT id FROM joueurs WHERE nom = ?"
     val = (nom_joueur,)
@@ -295,7 +333,23 @@ def addJoueur(nom_joueur):
 
     return 'Joueur cree'
 
-def startPartie(id_partie):
+def getIdPartieFromNomPartie(nom_partie):
+    commande = "SELECT id FROM parties WHERE nom = '"+nom_partie+"'"
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande)
+    rows = cur.fetchall()
+    conn.close
+
+    id=rows
+    return id[0][0]
+
+
+@app.route('/start/<nom_partie>')
+def startPartie(nom_partie):
+
+    id_partie=getIdPartieFromNomPartie(nom_partie)
+
     #Check si la partie n'est pas deja commencee
     commande = "SELECT etat FROM parties WHERE id = ?"
     val = (id_partie,)
@@ -390,6 +444,8 @@ def startPartie(id_partie):
     cur.execute(commande,val)
     conn.commit()
     conn.close
+
+    return 'Partie lancee'
     
 def removeContratNul(id_partie, id_assassin):
     commande = "DELETE FROM contrats WHERE id_partie = ? AND id_assassin = ? AND id_cible IS NULL"
@@ -423,6 +479,56 @@ def addPartie(nom_partie, nmb_joueur):
 
     return 'Partie creee'
 
+@app.route('/ATTENTION/remove/contrats')
+def RemoveAllContratsDB():
+    commande = "DELETE FROM contrats"
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande)
+    conn.commit()
+    conn.close
+    return 'Contrats supprimes'
+
+@app.route('/ATTENTION/remove/joueurs')
+def RemoveAllJoueursDB():
+    commande = "DELETE FROM joueurs"
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande)
+    conn.commit()
+    conn.close
+    return 'Joueurs supprimes'
+
+@app.route('/ATTENTION/remove/armes')
+def RemoveAllArmesDB():
+    commande = "DELETE FROM armes"
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande)
+    conn.commit()
+    conn.close
+    return 'Armes supprimees'
+
+@app.route('/ATTENTION/remove/lieux')
+def RemoveAllLieuxDB():
+    commande = "DELETE FROM lieux"
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande)
+    conn.commit()
+    conn.close
+    return 'Lieux supprimes'
+
+@app.route('/ATTENTION/remove/parties')
+def RemoveAllPartiesDB():
+    commande = "DELETE FROM parties"
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande)
+    conn.commit()
+    conn.close
+    return 'Parties supprimees'
+
 #----------------Creation des joueurs----------------------
 #IHM : nom_joueur
 #addJoueur(nom_joueur)
@@ -438,3 +544,8 @@ def addPartie(nom_partie, nmb_joueur):
 #--------------------Start partie-----------------------
 #IHM : bouton start, nom_partie
 #print(startPartie(2))
+
+#--------------------Get contrat------------------------
+#IHM : nom_joueur, nom_partie
+#print()
+
