@@ -1,7 +1,7 @@
 import random, sqlite3
 from datetime import datetime
 from time import strptime, strftime
-from flask import Flask
+from flask import Flask, request
 
 VAL_CONTRAT_REALISE = 1
 VAL_CONTRAT_EN_COURS = 0
@@ -12,8 +12,14 @@ VAL_PARTIE_FINIE = 2
 
 app = Flask(__name__)
 
-@app.route("/home")
-def hello_world():
+
+@app.route('/home')
+def home():
+    html = '<form action="/newPlayer" method="get"> <button type="submit">Creer un joueur</button> </form> <br> <form action="/join" method="get"> <button type="submit">Rejoindre une partie</button> </form>'
+    return html
+
+@app.route("/help")
+def help():
     return "# Killer <br> ### Creer un joueur : <br> > /newPlayer/[nom_joueur]/[mdp] <br> ### Rejoindre une partie : <br> > /join/[nom_partie]/[nom_joueur]/[mdp] <br> ### Afficher un contrat : <br> > /myContrat/[nom_partie]/[nom_joueur]/[mdp] <br> ### Contrat realise : <br> > /contratDone/[nom_partie]/[nom_assassin]/[mdp]/[mdp_victime] <br> ### Modifier son mdp : <br> > /modifierMdp/[nom_joueur]/[mdp]/[nouveau_mdp] "
 
 
@@ -447,29 +453,36 @@ def addLieu(nom_lieu, descr):
     return 'Lieu cree'
 
 
-@app.route('/newPlayer/<nom_joueur>/<mdp>')
-def addJoueur(nom_joueur, mdp):
-    commande = "SELECT id FROM joueurs WHERE nom = ?"
-    val = (nom_joueur,)
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande,val)
-    joueur = cur.fetchall()
-    conn.close
+@app.route('/newPlayer',methods = ['POST', 'GET'])
+def addJoueur():
+    if(request.method == 'GET'):
+        html = '<form action="/newPlayer" method="post"> <label> Nom du joueur <label> <br> <input type="text" name="nom_joueur"> <br> <br> <label> Mot de passe </label> <br> <input type="password" name="mdp"> <br> <br> <button type="submit">Creer</button> </form>'
+        return html
 
-    if(len(joueur)!=0):
-        return "Le joueur existe deja"
+    else :
+        nom_joueur = request.form['nom_joueur']
+        mdp = request.form['mdp']
+        commande = "SELECT id FROM joueurs WHERE nom = ?"
+        val = (nom_joueur,)
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande,val)
+        joueur = cur.fetchall()
+        conn.close
+
+        if(len(joueur)!=0):
+            return "Le joueur existe deja"
 
 
-    commande = "INSERT INTO joueurs (nom, mdp) VALUES (?, ?)"
-    val = (nom_joueur,mdp)
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande,val)
-    conn.commit()
-    conn.close
+        commande = "INSERT INTO joueurs (nom, mdp) VALUES (?, ?)"
+        val = (nom_joueur,mdp)
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande,val)
+        conn.commit()
+        conn.close
 
-    return 'Joueur cree'
+        return 'Joueur cree'
 
 def getIdPartieFromNomPartie(nom_partie):
     commande = "SELECT id FROM parties WHERE nom = '"+nom_partie+"'"
