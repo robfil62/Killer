@@ -1,0 +1,3 @@
+cd C:\Users\robin\Projets VSC\Killer
+.venv\Scripts\activate.bat
+flask --app Killer run --host <IP> --port 80

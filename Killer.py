@@ -1,6 +1,6 @@
-from os import remove
 import random, sqlite3
 from datetime import datetime
+from time import strptime, strftime
 from flask import Flask
 
 VAL_CONTRAT_REALISE = 1
@@ -10,12 +10,11 @@ VAL_PARTIE_INIT = 0
 VAL_PARTIE_EN_COURS = 1
 VAL_PARTIE_FINIE = 2
 
-
 app = Flask(__name__)
 
 @app.route("/home")
 def hello_world():
-    return "ICI Rappel des liens utiles USERS ONLY"
+    return "# Killer <br> ### Creer un joueur : <br> > /newPlayer/[nom_joueur]/[mdp] <br> ### Rejoindre une partie : <br> > /join/[nom_partie]/[nom_joueur]/[mdp] <br> ### Afficher un contrat : <br> > /myContrat/[nom_partie]/[nom_joueur]/[mdp] <br> ### Contrat realise : <br> > /contratDone/[nom_partie]/[nom_assassin]/[mdp]/[mdp_victime] <br> ### Modifier son mdp : <br> > /modifierMdp/[nom_joueur]/[mdp]/[nouveau_mdp] "
 
 
 def getNomJoueurFromId(id):
@@ -500,7 +499,7 @@ def getIdArmeFromNomArme(nom_arme):
     id=rows
     return id[0][0]
 
-def getIdLieuFromNomArme(nom_lieu):
+def getIdLieuFromNomLieu(nom_lieu):
     commande = "SELECT id FROM lieux WHERE nom = '"+nom_lieu+"'"
     conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
     cur=conn.cursor()
@@ -561,7 +560,7 @@ def addWeapon(nom_arme,nom_partie):
 
 @app.route('/addPlace/<nom_lieu>/<nom_partie>')
 def addPlace(nom_lieu,nom_partie):
-    id_lieu = getIdLieuFromNomArme(nom_lieu)
+    id_lieu = getIdLieuFromNomLieu(nom_lieu)
     if (id_lieu==-1):
         return "Lieu inconnu"
 
@@ -711,12 +710,74 @@ def getEtatPartieFromIdPartie(id_partie):
 
     return rows[0][0]
 
+def triListes(listes):
+    liste_ass = listes[0]
+    liste_cib = listes[1]
+    liste_arm = listes[2]
+    liste_li = listes[3]
+    liste_dates_str = listes[4]
+
+    liste_dates = []
+    liste_ass_tri = []
+    liste_cib_tri = []
+    liste_arm_tri = []
+    liste_li_tri = []
+
+    for i in range(0,len(liste_dates_str)):
+        date = datetime.strptime(liste_dates_str[i],"%d/%m/%Y %H:%M:%S")
+        liste_dates.append(date)
+
+    for i in range(0,len(liste_dates)):
+        mi = liste_dates[i]
+        id_min = i
+        
+        for j in range(i+1,len(liste_dates)):
+            if(liste_dates[j]<mi):
+                mi = liste_dates[j]
+                id_min = j
+
+        save_i = liste_dates[i]
+        liste_dates[i]=liste_dates[id_min]
+        liste_dates[id_min] = save_i
+
+        save_i = liste_ass[i]
+        liste_ass[i]=liste_ass[id_min]
+        liste_ass[id_min] = save_i
+
+        save_i = liste_cib[i]
+        liste_cib[i]=liste_cib[id_min]
+        liste_cib[id_min] = save_i
+
+        save_i = liste_arm[i]
+        liste_arm[i]=liste_arm[id_min]
+        liste_arm[id_min] = save_i
+
+        save_i = liste_li[i]
+        liste_li[i]=liste_li[id_min]
+        liste_li[id_min] = save_i
+        
+
+    for i in range(0,len(liste_dates)):
+        liste_dates_str[i]=liste_dates[i].strftime("%d/%m/%Y %H:%M:%S")
+
+    liste_res=[]
+    liste_res.append(liste_ass)
+    liste_res.append(liste_cib)
+    liste_res.append(liste_arm)
+    liste_res.append(liste_li)
+    liste_res.append(liste_dates_str)
+
+    return liste_res
+
 @app.route('/afficherResultats/<nom_partie>')    
 def getResults(nom_partie):
     id_partie = getIdPartieFromNomPartie(nom_partie)
+
+    if(id_partie == -1):
+        return "Partie inconnue"
+
     etat_partie = getEtatPartieFromIdPartie(id_partie)
 
-   
     if(etat_partie != VAL_PARTIE_FINIE):
         return "La partie n'est pas terminee, vous ne pouvez pas consulter les resultats"
 
@@ -763,8 +824,8 @@ def getResults(nom_partie):
     liste_resultats.append(liste_noms_armes)
     liste_resultats.append(liste_noms_lieux)
     liste_resultats.append(liste_dates)
-  
-    #TODO Tri par heure
+
+    liste_resultats = triListes(liste_resultats)
     res=""
     for i in range(0,len(liste_resultats[0])):
         res+=str(liste_resultats[0][i]) + " a tue "+ str(liste_resultats[1][i]) + " avec l'arme "+str(liste_resultats[2][i])+ " dans le lieu "+str(liste_resultats[3][i]) + " le "+str(liste_resultats[4][i])+"<br>"
@@ -810,17 +871,6 @@ def modifMdp(nom_joueur, mdp, nouveau_mdp):
 
     return "Mot de passe modifie"
 
-
-@app.route('/ATTENTION/remove/contrats/ALL')
-def RemoveAllContratsDB():
-    commande = "DELETE FROM contrats"
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande)
-    conn.commit()
-    conn.close
-    return 'Contrats supprimes'
-
 @app.route('/ATTENTION/remove/joueurs/ALL')
 def RemoveAllJoueursDB():
     commande = "DELETE FROM joueurs"
@@ -859,5 +909,76 @@ def RemoveAllPartiesDB():
     cur.execute(commande)
     conn.commit()
     conn.close
+
+    commande = "DELETE FROM contrats"
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande)
+    conn.commit()
+    conn.close
     return 'Parties supprimees'
 
+
+@app.route('/ATTENTION/remove/joueur/<nom_joueur>')
+def RemoveJoueur(nom_joueur):
+    id_joueur = getIdJoueurFromNom(nom_joueur)
+    if (id_joueur==-1):
+        return "Joueur inconnu"
+
+    commande = "DELETE FROM joueurs WHERE id = '"+str(id_joueur)+"'"
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande)
+    conn.commit()
+    conn.close
+    return 'Joueur supprime'
+
+@app.route('/ATTENTION/remove/arme/<nom_arme>')
+def RemoveArme(nom_arme):
+    id_arme=getIdArmeFromNomArme(nom_arme)
+    if (id_arme==-1):
+        return "Arme inconnue"
+
+    commande = "DELETE FROM armes WHERE id = '"+str(id_arme)+"'"
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande)
+    conn.commit()
+    conn.close
+    return 'Arme supprimee'
+
+@app.route('/ATTENTION/remove/lieu/<nom_lieu>')
+def RemoveLieu(nom_lieu):
+    id_lieu=getIdLieuFromNomLieu(nom_lieu)
+    if (id_lieu==-1):
+        return "Lieu inconnu"
+
+    commande = "DELETE FROM lieux WHERE id = '"+str(id_lieu)+"'"
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande)
+    conn.commit()
+    conn.close
+    return 'Lieu supprime'
+
+@app.route('/ATTENTION/remove/partie/<nom_partie>')
+def RemovePartie(nom_partie):
+    id_partie = getIdPartieFromNomPartie(nom_partie)
+
+    if(id_partie==-1):
+        return "Partie inconnue"
+
+    commande = "DELETE FROM parties WHERE nom = '"+nom_partie+"'"
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande)
+    conn.commit()
+    conn.close
+
+    commande = "DELETE FROM contrats WHERE id_partie = '"+str(id_partie)+"'"
+    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+    cur=conn.cursor()
+    cur.execute(commande)
+    conn.commit()
+    conn.close
+    return 'Partie supprimee'
