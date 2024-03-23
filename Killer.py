@@ -1,7 +1,7 @@
 import random, sqlite3
 from datetime import datetime
 from time import strptime, strftime
-from flask import Flask, request
+from flask import Flask, request, redirect, url_for
 
 VAL_CONTRAT_REALISE = 1
 VAL_CONTRAT_EN_COURS = 0
@@ -12,10 +12,18 @@ VAL_PARTIE_FINIE = 2
 
 app = Flask(__name__)
 
+@app.route('/')
+def redirectHome():
+    return redirect(url_for('home'))
 
 @app.route('/home')
 def home():
-    html = '<form action="/newPlayer" method="get"> <button type="submit">Creer un joueur</button> </form> <br> <form action="/join" method="get"> <button type="submit">Rejoindre une partie</button> </form>'
+    html = '<form action="/newPlayer" method="get"> <button type="submit">Creer un joueur</button> </form> <br> <form action="/join" method="get"> <button type="submit">Rejoindre une partie</button> </form> <br>  <form action="/myContrat" method="get"> <button type="submit">Voir mon contrat actuel</button> </form> <br> <form action="/contratDone" method="get"> <button type="submit">Valider mon contrat actuel</button> </form> <br> <form action="/help" method="get"> <button type="submit">Aide</button> </form>'
+    return html
+
+@app.route('/admin')
+def admin():
+    html = '<form action="/newWeapon" method="get"> <button type="submit">Creer une arme</button> </form> <br> <form action="/newPlace" method="get"> <button type="submit">Creer un lieu</button> </form> <br>  <form action="/newParty" method="get"> <button type="submit">Creer une partie</button> </form> <br> <form action="/addWeapon" method="get"> <button type="submit">Ajouter une arme a une partie</button> </form> <br>  <form action="/addPlace" method="get"> <button type="submit">Ajouter un lieu a une partie</button> </form> <br>  <form action="/start" method="get"> <button type="submit">Lancer une partie</button> </form> <br> <form action="/helpAdmin" method="get"> <button type="submit">Aide</button> </form>'
     return html
 
 @app.route("/help")
@@ -224,36 +232,55 @@ def getMdpFromIdJoueur(id_joueur):
 
     return mdp
 
-@app.route('/contratDone/<nom_partie>/<nom_assassin>/<mdp>/<mdp_victime>')
-def setContratRempli(nom_assassin, nom_partie, mdp, mdp_victime):
-    id_partie=getIdPartieFromNomPartie(nom_partie)
-    id_assassin = getIdJoueurFromNom(nom_assassin)
+@app.route('/contratDone', methods=['GET','POST'])
+def setContratRempli():
+    if request.method == 'GET':
+        return '<form action="/contratDone" method="post"> <label> Nom de la partie <label> <br> <input type="text" name="nom_partie"> <br> <br> <label> Nom du joueur <label> <br> <input type="text" name="nom_assassin"> <br> <br> <label> Mot de passe </label> <br> <input type="password" name="mdp"> <br> <br> <label> Mot de passe de votre victime </label> <br> <input type="password" name="mdp_victime"> <br> <br> <button type="submit">Voir mon contrat</button> </form>'
+
+    else : 
+        nom_partie = request.form['nom_partie']
+        nom_assassin = request.form['nom_assassin']
+        mdp = request.form['mdp']
+        mdp_victime = request.form['mdp_victime']
+        id_partie=getIdPartieFromNomPartie(nom_partie)
+        if id_partie==-1:
+            return 'Partie inconnue <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form>'
+
+        etat_partie = getEtatPartieFromIdPartie(id_partie)
+        if(etat_partie != VAL_PARTIE_EN_COURS):
+            return 'La partie est terminee ou non demarree <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form> '
+
+        id_assassin = getIdJoueurFromNom(nom_assassin)
+        if id_assassin ==-1:
+            return 'Joueur inconnu <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form>'
     
-    id_contrat_realise = getIdContratFromIdAssassin(id_partie, id_assassin)
-    if id_contrat_realise != -1:
-        if (str(getMdpFromIdJoueur(id_assassin))!=str(mdp)):
-            return "Mot de passe de l'assassin incorrect"
+        id_contrat_realise = getIdContratFromIdAssassin(id_partie, id_assassin)
+        if id_contrat_realise != -1:
+            if (str(getMdpFromIdJoueur(id_assassin))!=str(mdp)):
+                return 'Mot de passe assassin incorrect <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form>'
 
-        id_cible = getIdCibleFromIdContrat(id_contrat_realise)
-        if (str(getMdpFromIdJoueur(id_cible))!=str(mdp_victime)):
-            return "Mot de passe de la victime incorrect"
+            id_cible = getIdCibleFromIdContrat(id_contrat_realise)
+            if (str(getMdpFromIdJoueur(id_cible))!=str(mdp_victime)):
+                return 'Mot de passe de la victime incorrect <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form>'
 
-        id_contrat_cible = getIdContratFromIdAssassin(id_partie, id_cible)
-        id_cible_cible = getIdCibleFromIdContrat(id_contrat_cible)
+            id_contrat_cible = getIdContratFromIdAssassin(id_partie, id_cible)
+            id_cible_cible = getIdCibleFromIdContrat(id_contrat_cible)
 
-        if (id_cible_cible == id_assassin):
-            setUpdateEtatContrat(VAL_CONTRAT_REALISE, id_contrat_realise)
-            setUpdateEtatContrat(VAL_CONTRAT_ECHOUE, id_contrat_cible)
-            setUpdateEtatPartie(VAL_PARTIE_FINIE, id_partie)
-            return('FIN DE PARTIE ------------------ Gagnant : '+ nom_assassin) 
+            if (id_cible_cible == id_assassin):
+                setUpdateEtatContrat(VAL_CONTRAT_REALISE, id_contrat_realise)
+                setUpdateEtatContrat(VAL_CONTRAT_ECHOUE, id_contrat_cible)
+                setUpdateEtatPartie(VAL_PARTIE_FINIE, id_partie)
+                return('FIN DE PARTIE ------------------ Gagnant : '+ nom_assassin+'<br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form>') 
 
+            else:
+                id_arme_cible = getIdArmeFromIdContrat(id_contrat_cible)
+                id_lieu_cible = getIdLieuFromIdContrat(id_contrat_cible)
+                setUpdateEtatContrat(VAL_CONTRAT_REALISE, id_contrat_realise)
+                setUpdateEtatContrat(VAL_CONTRAT_ECHOUE, id_contrat_cible)
+                addContrat(id_partie, id_assassin, id_cible_cible, id_arme_cible, id_lieu_cible)
+                return(nom_assassin + ", votre nouveau contrat : "+getContrat(getIdContratFromIdAssassin(id_partie,id_assassin)) +'<br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form>')
         else:
-            id_arme_cible = getIdArmeFromIdContrat(id_contrat_cible)
-            id_lieu_cible = getIdLieuFromIdContrat(id_contrat_cible)
-            setUpdateEtatContrat(VAL_CONTRAT_REALISE, id_contrat_realise)
-            setUpdateEtatContrat(VAL_CONTRAT_ECHOUE, id_contrat_cible)
-            addContrat(id_partie, id_assassin, id_cible_cible, id_arme_cible, id_lieu_cible)
-            return(nom_assassin + ", votre nouveau contrat : "+getContrat(getIdContratFromIdAssassin(id_partie,id_assassin)))
+            return 'Joueur pas dans la partie <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form>'
 
 def getContrat(id_contrat):
     if (id_contrat != -1) :
@@ -277,28 +304,35 @@ def finPartie(id_partie):
     conn.commit()
     conn.close
 
-@app.route('/newParty/<nom>/<nmb>')
-def addPartie(nom, nmb):
-    commande = "SELECT nom FROM parties WHERE nom = ?"
-    val = (nom,)
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande,val)
-    partie = cur.fetchall()
-    conn.close
+@app.route('/newParty', methods=['GET','POST'])
+def addPartie():
+    if request.method == 'GET':
+        return '<form action="/newParty" method="post"> <label> Nom de la partie <label> <br> <input type="text" name="nom_partie"> <br> <br> <label> Nombre de joueurs <label> <br> <input type="int" name="nmb_joueurs"> <br> <br> <button type="submit">Creer</button> </form>'
 
-    if(len(partie)!=0):
-        return "Le partie existe deja"
+    else :
+        nom_partie = request.form['nom_partie']
+        nmb_joueurs = request.form['nmb_joueurs']
 
-    commande = "INSERT INTO parties (nom, nmbJoueurs) VALUES (?,?)"
-    val = (nom, nmb)
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande,val)
-    conn.commit()
-    conn.close
+        commande = "SELECT nom FROM parties WHERE nom = ?"
+        val = (nom_partie,)
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande,val)
+        partie = cur.fetchall()
+        conn.close
 
-    return "Partie creee"
+        if(len(partie)!=0):
+            return 'La partie existe deja  <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
+
+        commande = "INSERT INTO parties (nom, nmbJoueurs) VALUES (?,?)"
+        val = (nom_partie, nmb_joueurs)
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande,val)
+        conn.commit()
+        conn.close
+
+        return 'Partie creee <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
 
 def removeContratNul(id_partie, id_assassin):
     commande = "DELETE FROM contrats WHERE id_partie = ? AND id_assassin = ? AND id_cible IS NULL"
@@ -312,15 +346,25 @@ def removeContratNul(id_partie, id_assassin):
 def triIds(ids):
     nmbJoueurs = len(ids)
     idsTries = []
+    print(ids)
     for i in range(nmbJoueurs):
         place=random.randint(0,nmbJoueurs-i-1)
         idsTries.append(ids[place])
         ids.remove(ids[place])
 
+        print(idsTries)
     return idsTries
 
-@app.route('/join/<nom_partie>/<nom_joueur>/<mdp>')
-def joinPartie(nom_joueur, nom_partie, mdp):
+@app.route('/join', methods=['GET','POST'])
+def joinPartie():
+    if(request.method == 'GET'):
+        html = '<form action="/join" method="post"> <label> Nom de la partie <label> <br> <input type="text" name="nom_partie"> <br> <br> <label> Nom du joueur <label> <br> <input type="text" name="nom_joueur"> <br> <br> <label> Mot de passe </label> <br> <input type="password" name="mdp"> <br> <br> <button type="submit">Creer</button> </form>'
+        return html
+
+    else :
+        nom_partie = request.form['nom_partie']
+        nom_joueur = request.form['nom_joueur']
+        mdp = request.form['mdp']
     commande = "SELECT id,mdp FROM joueurs WHERE nom = ?"
     val = (nom_joueur,)
     conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
@@ -330,10 +374,10 @@ def joinPartie(nom_joueur, nom_partie, mdp):
     conn.close
 
     if(len(joueur)!=1):
-        return "Joueur inconnu"
+        return 'Joueur inconnu <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form>'
 
     if(str(joueur[0][1])!=str(mdp)):
-        return "Mot de passe incorrect"
+        return 'Mot de passe incorrect <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form>'
 
     commande = "SELECT id FROM parties WHERE nom = ?"
     val = (nom_partie,)
@@ -344,7 +388,7 @@ def joinPartie(nom_joueur, nom_partie, mdp):
     conn.close
 
     if(len(partie)!=1):
-        return "Partie inconnue"
+        return 'Partie inconnue <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form>'
 
     id_partie = partie[0][0]
     id_joueur = joueur[0][0]
@@ -353,7 +397,7 @@ def joinPartie(nom_joueur, nom_partie, mdp):
     nmb_joueurs = getNmbJoueursInPartieFromIdPartie(id_partie)
 
     if(nmb_max == nmb_joueurs):
-        return "Le nombre maximal de joueurs a ete atteint"
+        return 'Le nombre maximal de joueurs a ete atteint <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form>'
 
     commande = "SELECT id_assassin FROM contrats WHERE id_assassin = ? AND id_partie = ?"
     val = (id_joueur, id_partie)
@@ -364,7 +408,7 @@ def joinPartie(nom_joueur, nom_partie, mdp):
     conn.close
 
     if(len(id)!=0):
-        return "joueur deja dans la partie"
+        return 'joueur deja dans la partie <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form>'
 
     commande = "INSERT INTO contrats (id_partie, id_assassin) VALUES (?,?)"
     val = (id_partie, id_joueur)
@@ -374,7 +418,7 @@ def joinPartie(nom_joueur, nom_partie, mdp):
     conn.commit()
     conn.close
 
-    return 'joueur ajoute a la partie'
+    return 'joueur ajoute a la partie <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form>'
 
 
 def getAllIdJoueursFromIdPartie(id_partie):
@@ -389,68 +433,94 @@ def getAllIdJoueursFromIdPartie(id_partie):
     liste_id=rows
     return liste_id
 
+@app.route('/triche/<id_partie>')
 def printAllContrats(id_partie):
     liste_id_joueurs = getAllIdJoueursFromIdPartie(id_partie)
     nmb_joueurs=len(liste_id_joueurs)
+    res=""
     for i in range(0,nmb_joueurs):
-        print(getContrat(getIdContratFromIdAssassin(id_partie, liste_id_joueurs[i][0])))
+        res = res +'<br>'+getNomJoueurFromId(liste_id_joueurs[i][0])+ " "+(getContrat(getIdContratFromIdAssassin(id_partie, liste_id_joueurs[i][0])))
 
-@app.route('/myContrat/<nom_partie>/<nom_joueur>/<mdp>')
-def printContratFromJoueur(nom_joueur,nom_partie,mdp):
-    id_partie = getIdPartieFromNomPartie(nom_partie)
-    id_joueur = getIdJoueurFromNom(nom_joueur)
-    if(str(getMdpFromIdJoueur(id_joueur))!=str(mdp)):
-        return "Mot de passe incorrect"
+    return res
 
-    return nom_joueur + ", votre contrat : " + getContrat(getIdContratFromIdAssassin(id_partie,id_joueur))
+@app.route('/myContrat', methods=['GET','POST'])
+def printContratFromJoueur():
+    if (request.method=='GET'):
+        return '<form action="/myContrat" method="post"> <label> Nom de la partie <label> <br> <input type="text" name="nom_partie"> <br> <br> <label> Nom du joueur <label> <br> <input type="text" name="nom_joueur"> <br> <br> <label> Mot de passe </label> <br> <input type="password" name="mdp"> <br> <br> <button type="submit">Voir mon contrat</button> </form>'
+    else:
+        nom_partie = request.form['nom_partie']
+        nom_joueur = request.form['nom_joueur']
+        mdp = request.form['mdp']
+        id_partie = getIdPartieFromNomPartie(nom_partie)
 
-@app.route('/newWeapon/<nom_arme>/<descr>')
-def addArme(nom_arme, descr):
-    commande = "SELECT id FROM armes WHERE nom = ?"
-    val = (nom_arme,)
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande,val)
-    arme = cur.fetchall()
-    conn.close
+        etat_partie = getEtatPartieFromIdPartie(id_partie)
+        if(etat_partie != VAL_PARTIE_EN_COURS):
+            return 'La partie est terminee ou non demarree <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form> '
 
-    if(len(arme)!=0):
-        return "L'arme existe deja"
+        id_joueur = getIdJoueurFromNom(nom_joueur)
+        if(str(getMdpFromIdJoueur(id_joueur))!=str(mdp)):
+            return 'Mot de passe incorrect <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form> <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form> '
 
+        return nom_joueur + ", votre contrat : " + getContrat(getIdContratFromIdAssassin(id_partie,id_joueur)) + '<br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form> '
 
-    commande = "INSERT INTO armes (nom, description) VALUES (?, ?)"
-    val = (nom_arme,descr)
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande,val)
-    conn.commit()
-    conn.close
+@app.route('/newWeapon',methods=['GET','POST'])
+def addArme():
+    if request.method=='GET':
+        return '<form action="/newWeapon" method="post"> <label> Nom de l arme <label> <br> <input type="text" name="nom_arme"> <br> <br> <label> Description <label> <br> <input type="text" name="descr"> <br> <br> <button type="submit">Creer</button> </form>'
 
-    return 'Arme creee'
+    else : 
+        nom_arme = request.form['nom_arme']
+        descr = request.form['descr']
+        commande = "SELECT id FROM armes WHERE nom = ?"
+        val = (nom_arme,)
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande,val)
+        arme = cur.fetchall()
+        conn.close
 
-@app.route('/newPlace/<nom_lieu>/<descr>')
-def addLieu(nom_lieu, descr):
-    commande = "SELECT id FROM lieux WHERE nom = ?"
-    val = (nom_lieu,)
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande,val)
-    lieu = cur.fetchall()
-    conn.close
-
-    if(len(lieu)!=0):
-        return "Le lieu existe deja"
+        if(len(arme)!=0):
+            return 'L arme existe deja <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
 
 
-    commande = "INSERT INTO lieux (nom, description) VALUES (?, ?)"
-    val = (nom_lieu,descr)
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande,val)
-    conn.commit()
-    conn.close
+        commande = "INSERT INTO armes (nom, description) VALUES (?, ?)"
+        val = (nom_arme,descr)
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande,val)
+        conn.commit()
+        conn.close
 
-    return 'Lieu cree'
+        return 'Arme creee <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
+
+@app.route('/newPlace', methods = ['GET','POST'])
+def addLieu():
+    if request.method =='GET':
+        return '<form action="/newPlace" method="post"> <label> Nom du lieu <label> <br> <input type="text" name="nom_lieu"> <br> <br> <label> Description <label> <br> <input type="text" name="descr"> <br> <br> <button type="submit">Creer</button> </form>'
+
+    else :
+        nom_lieu = request.form['nom_lieu']
+        descr = request.form['descr']
+        commande = "SELECT id FROM lieux WHERE nom = ?"
+        val = (nom_lieu,)
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande,val)
+        lieu = cur.fetchall()
+        conn.close
+
+        if(len(lieu)!=0):
+            return 'Le lieu existe deja <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
+
+        commande = "INSERT INTO lieux (nom, description) VALUES (?, ?)"
+        val = (nom_lieu,descr)
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande,val)
+        conn.commit()
+        conn.close
+
+        return 'Lieu cree <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
 
 
 @app.route('/newPlayer',methods = ['POST', 'GET'])
@@ -471,7 +541,7 @@ def addJoueur():
         conn.close
 
         if(len(joueur)!=0):
-            return "Le joueur existe deja"
+            return 'Le joueur existe deja  <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form> '
 
 
         commande = "INSERT INTO joueurs (nom, mdp) VALUES (?, ?)"
@@ -482,7 +552,7 @@ def addJoueur():
         conn.commit()
         conn.close
 
-        return 'Joueur cree'
+        return 'Joueur cree <br> <br> <form action="/home" method="get"> <button type="submit">Menu</button> </form>'
 
 def getIdPartieFromNomPartie(nom_partie):
     commande = "SELECT id FROM parties WHERE nom = '"+nom_partie+"'"
@@ -527,191 +597,210 @@ def getIdLieuFromNomLieu(nom_lieu):
     return id[0][0]
 
 
-@app.route('/addWeapon/<nom_arme>/<nom_partie>')
-def addWeapon(nom_arme,nom_partie):
-    id_arme = getIdArmeFromNomArme(nom_arme)
-    if (id_arme==-1):
-        return "Arme inconnue"
+@app.route('/addWeapon',methods=['GET','POST'])
+def addWeapon():
+    if request.method=='GET':
+        return '<form action="/addWeapon" method="post"> <label> Nom de l arme <label> <br> <input type="text" name="nom_arme"> <br> <br> <label> Nom de la partie </label> <br> <input type="text" name="nom_partie"> <br> <br> <button type="submit">Ajouter</button> </form>'
 
-    id_partie = getIdPartieFromNomPartie(nom_partie)
-    if (id_partie == -1):
-        return "Partie inconnue"
+    else : 
+        nom_arme = request.form['nom_arme']
+        nom_partie = request.form['nom_partie']
+        id_arme = getIdArmeFromNomArme(nom_arme)
+        if (id_arme==-1):
+            return 'Arme inconnue <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
 
-    commande = "SELECT listeIdArmes FROM parties WHERE id = '"+str(id_partie)+"'"
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande)
-    rows = cur.fetchall()
-    conn.close
+        id_partie = getIdPartieFromNomPartie(nom_partie)
+        if (id_partie == -1):
+            return 'Partie inconnue <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
 
-    if(rows[0][0] is None):
-        ids_armes=str(id_arme)
+        commande = "SELECT listeIdArmes FROM parties WHERE id = '"+str(id_partie)+"'"
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande)
+        rows = cur.fetchall()
+        conn.close
 
-    else:
-        ids_armes=str(rows[0][0])
-        liste_id=ids_armes.split(",")
+        if(rows[0][0] is None):
+            ids_armes=str(id_arme)
+
+        else:
+            ids_armes=str(rows[0][0])
+            liste_id=ids_armes.split(",")
  
-        if(len(liste_id)==getNmbMaxJoueursFromIdPartie(id_partie)):
-            return "Le nombre maximal d'arme a ete selectionne"
+            if(len(liste_id)==getNmbMaxJoueursFromIdPartie(id_partie)):
+                return 'Le nombre maximal d arme a ete selectionne <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
 
-        for i in range(0,len(liste_id)):
-            if (str(liste_id[i])==str(id_arme)):
-                return "Arme deja ajoutee"
+            for i in range(0,len(liste_id)):
+                if (str(liste_id[i])==str(id_arme)):
+                    return 'Arme deja ajoutee <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
 
-        ids_armes=ids_armes+","+str(id_arme)
+            ids_armes=ids_armes+","+str(id_arme)
 
-    commande = "UPDATE parties SET listeIdArmes = ? WHERE id = ?"
-    val = (ids_armes, id_partie)
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande,val)
-    conn.commit()
-    conn.close
+        commande = "UPDATE parties SET listeIdArmes = ? WHERE id = ?"
+        val = (ids_armes, id_partie)
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande,val)
+        conn.commit()
+        conn.close
 
-    return 'Arme ajoutee'
-
-
-@app.route('/addPlace/<nom_lieu>/<nom_partie>')
-def addPlace(nom_lieu,nom_partie):
-    id_lieu = getIdLieuFromNomLieu(nom_lieu)
-    if (id_lieu==-1):
-        return "Lieu inconnu"
-
-    id_partie = getIdPartieFromNomPartie(nom_partie)
-    if (id_partie == -1):
-        return "Partie inconnue"
-
-    commande = "SELECT listeIdLieux FROM parties WHERE id = '"+str(id_partie)+"'"
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande)
-    rows = cur.fetchall()
-    conn.close
-
-    if(rows[0][0] is None):
-        ids_lieux=str(id_lieu)
-
-    else:
-        ids_lieux=str(rows[0][0])
-        liste_id=ids_lieux.split(",")
- 
-        if(len(liste_id)==getNmbMaxJoueursFromIdPartie(id_partie)):
-            return "Le nombre maximal de lieu a ete selectionne"
-
-        for i in range(0,len(liste_id)):
-            if (str(liste_id[i])==str(id_lieu)):
-                return "Lieu deja ajoute"
-
-        ids_lieux=ids_lieux+","+str(id_lieu)
-
-    commande = "UPDATE parties SET listeIdLieux = ? WHERE id = ?"
-    val = (ids_lieux, id_partie)
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande,val)
-    conn.commit()
-    conn.close
-
-    return 'Lieu ajoute'
+        return 'Arme ajoutee <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
 
 
-
-@app.route('/start/<nom_partie>')
-def startPartie(nom_partie):
-
-    id_partie=getIdPartieFromNomPartie(nom_partie)
-
-    #Check si la partie n'est pas deja commencee
-    commande = "SELECT etat FROM parties WHERE id = ?"
-    val = (id_partie,)
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande,val)
-    etat = cur.fetchall()
-    conn.close
-
-    if(etat[0][0]!= VAL_PARTIE_INIT):
-        return "La partie est deja en cours"
+@app.route('/addPlace', methods=['GET','POST'])
+def addPlace():
+    if request.method=='GET':
+        return '<form action="/addPlace" method="post"> <label> Nom du lieu <label> <br> <input type="text" name="nom_lieu"> <br> <br> <label> Nom de la partie </label> <br> <input type="text" name="nom_partie"> <br> <br> <button type="submit">Ajouter</button> </form>'
     
-    #Check si tous les joueurs sont la
-    nmb_joueur = getNmbJoueursInPartieFromIdPartie(id_partie)
-    max_joueur = getNmbMaxJoueursFromIdPartie(id_partie)
-    if(nmb_joueur!=max_joueur):
-        return "Tous les joueurs ne sont pas prets"
+    else : 
+        nom_lieu = request.form['nom_lieu']
+        nom_partie = request.form['nom_partie']
+        id_lieu = getIdLieuFromNomLieu(nom_lieu)
+        if (id_lieu==-1):
+            return 'Lieu inconnu  <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
 
-    #Check si les armes sont pretes
-    nmb_armes = getNmbArmesInPartieFromIdPartie(id_partie)
-    max_joueur = getNmbMaxJoueursFromIdPartie(id_partie)
-    if(nmb_armes!=max_joueur):
-        return "Toutes les armes n'ont pas ete selectionnees"
+        id_partie = getIdPartieFromNomPartie(nom_partie)
+        if (id_partie == -1):
+            return 'Partie inconnue  <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
 
-    #Check si les lieux sont prets
-    nmb_lieux = getNmbLieuxInPartieFromIdPartie(id_partie)
-    max_joueur = getNmbMaxJoueursFromIdPartie(id_partie)
-    if(nmb_lieux!=max_joueur):
-        return "Tous les lieux n'ont pas ete selectionnes"
+        commande = "SELECT listeIdLieux FROM parties WHERE id = '"+str(id_partie)+"'"
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande)
+        rows = cur.fetchall()
+        conn.close
 
-    #Preparation des joueurs
-    commande = "SELECT id_assassin FROM contrats WHERE id_partie = ?"
-    val = (id_partie,)
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande,val)
-    ids_joueurs = cur.fetchall()
-    conn.close
+        if(rows[0][0] is None):
+            ids_lieux=str(id_lieu)
 
-    liste_joueurs=[]
-    for i in range(len(ids_joueurs)):
-        liste_joueurs.append(ids_joueurs[i][0])
+        else:
+            ids_lieux=str(rows[0][0])
+            liste_id=ids_lieux.split(",")
+ 
+            if(len(liste_id)==getNmbMaxJoueursFromIdPartie(id_partie)):
+                return 'Le nombre maximal de lieu a ete selectionne  <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
 
-    for i in range(30):
-        liste_joueurs=triIds(liste_joueurs)
+            for i in range(0,len(liste_id)):
+                if (str(liste_id[i])==str(id_lieu)):
+                    return 'Lieu deja ajoute  <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
 
-    #Preparation des armes
-    commande = "SELECT listeIdArmes FROM parties WHERE id='"+str(id_partie)+"'"
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande)
-    ids_armes = cur.fetchall()
-    conn.close
+            ids_lieux=ids_lieux+","+str(id_lieu)
 
-    liste_armes=str(ids_armes[0][0]).split(',')
+        commande = "UPDATE parties SET listeIdLieux = ? WHERE id = ?"
+        val = (ids_lieux, id_partie)
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande,val)
+        conn.commit()
+        conn.close
+
+        return 'Lieu ajoute  <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
+
+
+
+@app.route('/start', methods=['GET','POST'])
+def startPartie():
+    if request.method =='GET':
+        return '<form action="/start" method="post"> <label> Nom de la partie <label> <br> <input type="text" name="nom_partie"> <br> <br> <button type="submit">Lancer</button> </form>'
+
+    else : 
+        nom_partie = request.form['nom_partie']
+        id_partie=getIdPartieFromNomPartie(nom_partie)
+
+        if id_partie ==-1:
+            return 'Partie inconnue  <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
+
+        #Check si la partie n'est pas deja commencee
+        commande = "SELECT etat FROM parties WHERE id = ?"
+        val = (id_partie,)
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande,val)
+        etat = cur.fetchall()
+        conn.close
+
+        if(etat[0][0]!= VAL_PARTIE_INIT):
+            return 'La partie est deja en cours  <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
+            
+        #Check si tous les joueurs sont la
+        nmb_joueur = getNmbJoueursInPartieFromIdPartie(id_partie)
+        max_joueur = getNmbMaxJoueursFromIdPartie(id_partie)
+        if(nmb_joueur!=max_joueur):
+            return 'Tous les joueurs ne sont pas prets  <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
+
+        #Check si les armes sont pretes
+        nmb_armes = getNmbArmesInPartieFromIdPartie(id_partie)
+        max_joueur = getNmbMaxJoueursFromIdPartie(id_partie)
+        if(nmb_armes!=max_joueur):
+            return 'Toutes les armes n ont pas ete selectionnees <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
+
+        #Check si les lieux sont prets
+        nmb_lieux = getNmbLieuxInPartieFromIdPartie(id_partie)
+        max_joueur = getNmbMaxJoueursFromIdPartie(id_partie)
+        if(nmb_lieux!=max_joueur):
+            return 'Tous les lieux n ont pas ete selectionnes  <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
+
+        #Preparation des joueurs
+        commande = "SELECT id_assassin FROM contrats WHERE id_partie = ?"
+        val = (id_partie,)
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande,val)
+        ids_joueurs = cur.fetchall()
+        conn.close
+
+        liste_joueurs=[]
+        for i in range(len(ids_joueurs)):
+            liste_joueurs.append(ids_joueurs[i][0])
+
+        for i in range(30):
+            liste_joueurs=triIds(liste_joueurs)
+
+        #Preparation des armes
+        commande = "SELECT listeIdArmes FROM parties WHERE id='"+str(id_partie)+"'"
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande)
+        ids_armes = cur.fetchall()
+        conn.close
+
+        liste_armes=str(ids_armes[0][0]).split(',')
   
-    for i in range(30):
-        liste_armes=triIds(liste_armes)
+        for i in range(30):
+            liste_armes=triIds(liste_armes)
 
 
-    #Preparation des lieux
-    commande = "SELECT listeIdLieux FROM parties WHERE id='"+str(id_partie)+"'"
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande)
-    ids_lieux = cur.fetchall()
-    conn.close
+        #Preparation des lieux
+        commande = "SELECT listeIdLieux FROM parties WHERE id='"+str(id_partie)+"'"
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande)
+        ids_lieux = cur.fetchall()
+        conn.close
 
-    liste_lieux=str(ids_lieux[0][0]).split(',')
+        liste_lieux=str(ids_lieux[0][0]).split(',')
 
-    for i in range(30):
-        liste_lieux=triIds(liste_lieux)
+        for i in range(30):
+            liste_lieux=triIds(liste_lieux)
 
-    #Attribution des contrats
-    for i in range(0, max_joueur-1):
-        removeContratNul(id_partie,liste_joueurs[i])
-        addContrat(id_partie,liste_joueurs[i],liste_joueurs[i+1],liste_armes[i],liste_lieux[i])
+        #Attribution des contrats
+        for i in range(0, max_joueur-1):
+            removeContratNul(id_partie,liste_joueurs[i])
+            addContrat(id_partie,liste_joueurs[i],liste_joueurs[i+1],liste_armes[i],liste_lieux[i])
 
-    removeContratNul(id_partie, liste_joueurs[max_joueur-1])
-    addContrat(id_partie, liste_joueurs[max_joueur-1],liste_joueurs[0],liste_armes[max_joueur-1],liste_lieux[max_joueur-1])
+        removeContratNul(id_partie, liste_joueurs[max_joueur-1])
+        addContrat(id_partie, liste_joueurs[max_joueur-1],liste_joueurs[0],liste_armes[max_joueur-1],liste_lieux[max_joueur-1])
 
-    #Changement de l'etat de la partie
-    commande = "UPDATE parties SET etat = ? WHERE id = ?"
-    val = (VAL_PARTIE_EN_COURS, id_partie)
-    conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
-    cur=conn.cursor()
-    cur.execute(commande,val)
-    conn.commit()
-    conn.close
+        #Changement de l'etat de la partie
+        commande = "UPDATE parties SET etat = ? WHERE id = ?"
+        val = (VAL_PARTIE_EN_COURS, id_partie)
+        conn=sqlite3.connect("C:/Users/robin/Projets VSC/Killer/killer.db")
+        cur=conn.cursor()
+        cur.execute(commande,val)
+        conn.commit()
+        conn.close
 
-    return 'Partie lancee'
+        return 'Partie lancee  <br> <br> <form action="/admin" method="get"> <button type="submit">Menu</button> </form>'
 
 def getEtatPartieFromIdPartie(id_partie):
     commande = "SELECT etat FROM parties WHERE id = '"+str(id_partie)+"'"
